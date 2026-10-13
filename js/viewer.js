@@ -1,4 +1,6 @@
-// 2D CAD viewer: WebGL for geometry, a 2D canvas overlay for text, measurements and markers.
+// 2D CAD viewer: optional web map underneath, WebGL for geometry,
+// and a 2D canvas overlay for text, measurements and markers.
+import { Basemap } from './basemap.js';
 
 const VERT = `
 attribute vec2 a_pos;
@@ -35,11 +37,16 @@ function compile(gl, type, src) {
 export class Viewer {
   constructor(container) {
     this.container = container;
+    this.baseCanvas = document.createElement('canvas');
     this.glCanvas = document.createElement('canvas');
     this.overlay = document.createElement('canvas');
+    this.baseCanvas.className = 'base-layer';
     this.glCanvas.className = 'gl-layer';
     this.overlay.className = 'overlay-layer';
-    container.append(this.glCanvas, this.overlay);
+    container.append(this.baseCanvas, this.glCanvas, this.overlay);
+    this.baseCtx = this.baseCanvas.getContext('2d');
+    this.basemap = new Basemap(() => this.requestRender());
+    this.georef = null;
 
     const gl = this.glCanvas.getContext('webgl', { antialias: true, preserveDrawingBuffer: true });
     if (!gl) throw new Error('WebGL is not available in this browser.');
@@ -130,6 +137,14 @@ export class Viewer {
 
   setLight(light) { this.light = light; this.requestRender(); }
 
+  setGeoref(georef) { this.georef = georef; this.requestRender(); }
+
+  setBasemap(provider, opacity) {
+    this.basemap.setProvider(provider);
+    if (opacity !== undefined) this.baseCanvas.style.opacity = opacity;
+    this.requestRender();
+  }
+
   // --- Coordinates
   screenToWorld(sx, sy) {
     const { cx, cy, zoom } = this.view;
@@ -158,7 +173,7 @@ export class Viewer {
     this.width = Math.max(1, r.width);
     this.height = Math.max(1, r.height);
     this.dpr = dpr;
-    for (const c of [this.glCanvas, this.overlay]) {
+    for (const c of [this.baseCanvas, this.glCanvas, this.overlay]) {
       c.width = Math.round(this.width * dpr);
       c.height = Math.round(this.height * dpr);
     }
@@ -169,9 +184,14 @@ export class Viewer {
 
   render() {
     const gl = this.gl;
+    const showBase = !!(this.basemap.provider && this.georef && this.drawing);
+    this.basemap.draw(this.baseCtx, { ...this.view, width: this.width, height: this.height, dpr: this.dpr },
+      showBase ? this.georef : null);
     const bg = this.light ? [1, 1, 1] : [0.11, 0.12, 0.14];
     gl.viewport(0, 0, this.glCanvas.width, this.glCanvas.height);
-    gl.clearColor(bg[0], bg[1], bg[2], 1);
+    // Transparent when a basemap is shown so the tiles show through.
+    if (showBase) gl.clearColor(0, 0, 0, 0);
+    else gl.clearColor(bg[0], bg[1], bg[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     const ctx = this.ctx;
@@ -182,7 +202,7 @@ export class Viewer {
     gl.useProgram(this.prog);
     gl.uniform2f(this.loc.center, this.view.cx, this.view.cy);
     gl.uniform2f(this.loc.scale, (this.view.zoom * 2) / this.width, (this.view.zoom * 2) / this.height);
-    gl.uniform1f(this.loc.light, this.light ? 1 : 0);
+    gl.uniform1f(this.loc.light, this._lightLines() ? 1 : 0);
     gl.uniform1f(this.loc.pointSize, 3 * this.dpr);
     gl.enableVertexAttribArray(this.loc.pos);
     gl.enableVertexAttribArray(this.loc.col);
@@ -205,8 +225,13 @@ export class Viewer {
     this._drawMarker();
   }
 
+  // White (ACI 7) entities are drawn black on light backgrounds, including the street map.
+  _lightLines() {
+    return this.light || (this.basemap.isLight && !!this.georef);
+  }
+
   _textColor(c) {
-    if (this.light && c[0] > 242 && c[1] > 242 && c[2] > 242) return '#000';
+    if (this._lightLines() && c[0] > 242 && c[1] > 242 && c[2] > 242) return '#000';
     return `rgb(${c[0]},${c[1]},${c[2]})`;
   }
 
@@ -317,6 +342,9 @@ export class Viewer {
     c.width = this.glCanvas.width;
     c.height = this.glCanvas.height;
     const cx = c.getContext('2d');
+    cx.fillStyle = this.light ? '#fff' : '#1c1f24';
+    cx.fillRect(0, 0, c.width, c.height);
+    cx.drawImage(this.baseCanvas, 0, 0);
     cx.drawImage(this.glCanvas, 0, 0);
     cx.drawImage(this.overlay, 0, 0);
     return c.toDataURL('image/png');

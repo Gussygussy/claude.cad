@@ -1,6 +1,8 @@
 import { Viewer } from './viewer.js';
 import { buildDrawing } from './drawing.js';
 import { rgbToCss } from './aci.js';
+import { makeGeoref, looksLikeUtm } from './geo.js';
+import { PROVIDERS } from './basemap.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -92,6 +94,7 @@ function onDrawingLoaded() {
   document.title = `${drawing.file.name} — DWG Viewer`;
   for (const id of ['btn-extents', 'btn-measure', 'btn-text', 'btn-points', 'btn-png']) $(id).disabled = false;
   renderInfo();
+  updateGeoref();
   renderLayers();
   runSearch();
 }
@@ -167,6 +170,76 @@ function renderLayers() {
 
 $('layers-all').addEventListener('click', () => drawing?.layers.forEach((L) => L._set?.(true)));
 $('layers-none').addEventListener('click', () => drawing?.layers.forEach((L) => L._set?.(false)));
+
+// --- Georeference & basemap
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } },
+};
+$('utm-zone').value = store.get('utmZone', '23');
+$('utm-hemi').value = store.get('utmHemi', 'S');
+$('map-opacity').value = store.get('mapOpacity', '1');
+let basemapKey = '';
+
+function updateGeoref() {
+  const zone = Math.round(Number($('utm-zone').value));
+  const south = $('utm-hemi').value === 'S';
+  const status = $('geo-status');
+  let georef = null;
+  if (drawing) {
+    const [ox, oy] = drawing.origin;
+    if (!looksLikeUtm(ox, oy)) {
+      status.textContent = 'These coordinates don\'t look like UTM, so the drawing can\'t be placed on the map.';
+    } else if (!(zone >= 1 && zone <= 60)) {
+      status.textContent = 'Enter a UTM zone between 1 and 60.';
+    } else {
+      georef = makeGeoref(drawing.origin, zone, south);
+      const [lat, lon] = georef.toLatLon(0, 0);
+      status.replaceChildren(
+        `Center ${lat.toFixed(5)}, ${lon.toFixed(5)} · `,
+        Object.assign(document.createElement('a'), {
+          href: `https://www.openstreetmap.org/?mlat=${lat.toFixed(6)}&mlon=${lon.toFixed(6)}#map=16/${lat.toFixed(6)}/${lon.toFixed(6)}`,
+          target: '_blank', rel: 'noopener', textContent: 'open in OpenStreetMap',
+        }),
+      );
+    }
+  }
+  viewer.setGeoref(georef);
+  for (const b of document.querySelectorAll('#basemap-buttons [data-basemap]')) {
+    if (b.dataset.basemap) b.disabled = !georef;
+  }
+  setBasemap(georef ? basemapKey : '');
+}
+
+function setBasemap(key) {
+  if (viewer.georef) basemapKey = key;
+  const active = viewer.georef ? key : '';
+  for (const b of document.querySelectorAll('#basemap-buttons [data-basemap]')) {
+    b.classList.toggle('active', b.dataset.basemap === active);
+  }
+  viewer.setBasemap(active || null, $('map-opacity').value);
+  const attr = $('attribution');
+  const P = PROVIDERS[active];
+  attr.classList.toggle('hidden', !P);
+  if (P) {
+    attr.textContent = P.attribution;
+    attr.href = P.attributionUrl;
+  }
+}
+
+document.querySelectorAll('#basemap-buttons [data-basemap]').forEach((b) =>
+  b.addEventListener('click', () => setBasemap(b.dataset.basemap)));
+for (const id of ['utm-zone', 'utm-hemi']) {
+  $(id).addEventListener('change', () => {
+    store.set('utmZone', $('utm-zone').value);
+    store.set('utmHemi', $('utm-hemi').value);
+    updateGeoref();
+  });
+}
+$('map-opacity').addEventListener('input', () => {
+  store.set('mapOpacity', $('map-opacity').value);
+  viewer.setBasemap(viewer.basemap.provider, $('map-opacity').value);
+});
 
 // --- Text search
 function runSearch() {
@@ -259,7 +332,12 @@ window.addEventListener('keydown', (e) => {
 const fmtCoord = (v) => v.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 viewer.onCursor = ([x, y]) => {
   if (!drawing) return;
-  $('coords').textContent = `X ${fmtCoord(x + drawing.origin[0])}   Y ${fmtCoord(y + drawing.origin[1])}`;
+  let text = `X ${fmtCoord(x + drawing.origin[0])}   Y ${fmtCoord(y + drawing.origin[1])}`;
+  if (viewer.georef) {
+    const [lat, lon] = viewer.georef.toLatLon(x, y);
+    text += `   ·   ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+  }
+  $('coords').textContent = text;
 };
 viewer.onMeasure = ({ a, b }) => {
   const dx = b[0] - a[0], dy = b[1] - a[1];
