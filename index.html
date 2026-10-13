@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DWG Viewer</title>
+  <meta name="description" content="Open and inspect AutoCAD DWG drawings directly in your browser. Files never leave your computer." />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span>DWG Viewer</span>
+    </div>
+    <label class="btn primary" title="Open a DWG file">
+      <input id="file-input" type="file" accept=".dwg" hidden />
+      Open DWG
+    </label>
+    <div class="tools" role="toolbar">
+      <button class="btn" id="btn-extents" title="Zoom to extents (double-click / F)" disabled>Fit</button>
+      <button class="btn toggle" id="btn-measure" title="Measure distance (M)" disabled>Measure</button>
+      <button class="btn toggle active" id="btn-text" title="Show text (T)" disabled>Text</button>
+      <button class="btn toggle active" id="btn-points" title="Show points" disabled>Points</button>
+      <button class="btn" id="btn-theme" title="Toggle light / dark background">Background</button>
+      <button class="btn" id="btn-png" title="Save the current view as PNG" disabled>Save PNG</button>
+      <button class="btn" id="btn-panel" title="Show / hide side panel">Panel</button>
+    </div>
+    <div class="file-name" id="file-name"></div>
+  </header>
+
+  <main class="layout">
+    <section class="canvas-wrap" id="canvas-wrap">
+      <div class="dropzone" id="dropzone">
+        <div class="drop-card">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h1>Drop a DWG file here</h1>
+          <p>or use <strong>Open DWG</strong>. Supports AutoCAD R13 through 2018+ (AC1012–AC1032).</p>
+          <p class="muted">Files are processed locally in your browser and never uploaded.</p>
+        </div>
+      </div>
+      <div class="loading hidden" id="loading">
+        <div class="spinner"></div>
+        <div id="loading-text">Loading…</div>
+      </div>
+      <div class="error hidden" id="error"></div>
+      <div class="measure-result hidden" id="measure-result"></div>
+    </section>
+
+    <aside class="panel" id="panel">
+      <details open>
+        <summary>Drawing</summary>
+        <dl class="info" id="info"><dt>No file loaded</dt></dl>
+      </details>
+      <details open class="grow">
+        <summary>Layers <span class="count" id="layer-count"></span></summary>
+        <div class="layer-actions">
+          <button class="btn small" id="layers-all">All on</button>
+          <button class="btn small" id="layers-none">All off</button>
+        </div>
+        <ul class="layers" id="layers"></ul>
+      </details>
+      <details>
+        <summary>Find text</summary>
+        <input type="search" id="search" placeholder="e.g. PV, COTA, 794…" autocomplete="off" />
+        <ul class="results" id="results"></ul>
+      </details>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span id="coords">X — Y —</span>
+    <span id="status-msg"></span>
+    <span class="hint">Scroll to zoom · drag to pan · double-click to fit</span>
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
