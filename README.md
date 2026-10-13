@@ -29,7 +29,7 @@ python3 -m http.server 8000
 # then open http://localhost:8000
 ```
 
-Any static host works. Pushes to `main` (or the current default branch) are deployed to GitHub Pages by `.github/workflows/pages.yml` — Pages must be enabled with **Settings → Pages → Source: GitHub Actions**.
+Any static host works. The live site is served by GitHub Pages straight from the default branch (**Settings → Pages → Deploy from a branch**), so every push updates it within a minute or two.
 
 The DWG engine (~11 MB WASM) and `earcut` are loaded from the jsDelivr CDN on first use, so an internet connection is required.
 
